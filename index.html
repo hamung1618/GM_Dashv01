@@ -202,6 +202,13 @@
         .tab-btn[data-tab="tab6"].active .tab-icon {
             color: #0f766e;
         }
+        .tab-btn[data-tab="tab8"].active {
+            color: #0369a1;
+            border-bottom-color: #0369a1;
+        }
+        .tab-btn[data-tab="tab8"].active .tab-icon {
+            color: #0369a1;
+        }
         .tab-btn[data-tab="tab7"].active {
             color: #6d28d9;
             border-bottom-color: #6d28d9;
@@ -2010,6 +2017,10 @@
             <svg class="tab-icon" viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="1.5"></rect><line x1="2.5" y1="9.5" x2="21.5" y2="9.5"></line><line x1="5.5" y1="14.5" x2="10.5" y2="14.5"></line></svg>
             Pembayaran <span class="badge-tab" id="badgePembayaran">2</span>
         </button>
+        <button class="tab-btn" data-tab="tab8">
+            <svg class="tab-icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+            Save Data All
+        </button>
     </div>
 
     <!-- ======= TAB 1 – BANK DATA PENJUALAN ======= -->
@@ -2503,7 +2514,55 @@
         </div>
     </div>
 
-    <!-- ======= MODALS ======= -->
+    <!-- ======= TAB 8 – SAVE DATA ALL ======= -->
+    <div class="tab-content" id="tab8">
+        <div class="container" style="max-width:700px; padding:16px; margin:0 auto;">
+            <div class="card">
+                <div style="padding:18px;">
+                    <div class="judul-kecil" style="margin-bottom:2px;">💾 SAVE DATA ALL <span>Backup Seluruh Data Aplikasi</span></div>
+                    <div class="no-print" style="font-size:10px;color:#6b7280;margin-top:2px;margin-bottom:14px;">
+                        Menyimpan seluruh data (Bank Data Penjualan, Data Uang Masuk, Riwayat Cetak Tagihan, dan Input Harian/Pembayaran) menjadi satu file backup <strong>.json</strong> yang diunduh ke perangkat ini. File ini bisa dipakai untuk memulihkan data kapan saja lewat tombol Restore di bawah.
+                    </div>
+
+                    <div id="saveAllSummary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:16px;">
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;">
+                            <div style="font-size:18px;font-weight:700;color:#1d4ed8;" id="sumSales">0</div>
+                            <div style="font-size:9px;color:#64748b;">Bank Data Penjualan</div>
+                        </div>
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;">
+                            <div style="font-size:18px;font-weight:700;color:#b45309;" id="sumCash">0</div>
+                            <div style="font-size:9px;color:#64748b;">Data Uang Masuk (hari)</div>
+                        </div>
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;">
+                            <div style="font-size:18px;font-weight:700;color:#b91c1c;" id="sumPrint">0</div>
+                            <div style="font-size:9px;color:#64748b;">Riwayat Cetak Tagihan</div>
+                        </div>
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;">
+                            <div style="font-size:18px;font-weight:700;color:#7c3aed;" id="sumHarian">0</div>
+                            <div style="font-size:9px;color:#64748b;">Input Harian (tanggal)</div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                        <button class="btn btn-success" id="btnSaveAllData" style="font-size:13px;padding:10px 20px;">
+                            <i class="bi bi-save"></i> Save All Data
+                        </button>
+                        <button class="btn btn-outline" id="btnRestoreAllData" style="font-size:13px;padding:10px 20px;">
+                            <i class="bi bi-cloud-download"></i> Restore dari Backup
+                        </button>
+                        <input type="file" id="restoreAllFileInput" accept="application/json" style="display:none;">
+                    </div>
+
+                    <div id="saveAllStatus" class="status-info" style="margin-top:14px;">📭 Belum pernah backup di perangkat ini.</div>
+
+                    <div class="no-print text-muted" style="font-size:9px;color:#94a3b8;margin-top:16px;border-top:1px solid #e2e8f0;padding-top:10px;">
+                        ⚠️ Data aplikasi ini tersimpan di penyimpanan browser (IndexedDB/localStorage) pada perangkat ini saja. Kalau cache browser dibersihkan, HP/laptop diganti, atau aplikasi diinstal ulang, data bisa hilang. Lakukan <strong>Save All Data</strong> secara rutin dan simpan file backup-nya di tempat aman (Google Drive, email ke diri sendiri, dsb).
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="detailModalGlobal">
         <div class="modal-box">
             <div class="modal-head"><h2 id="detailModalTitleGlobal">🧾 Detail Faktur</h2><button class="modal-close" id="detailModalCloseGlobal">✕</button></div>
@@ -5381,6 +5440,149 @@
         window.addEventListener('orientationchange', scheduleFitTableWraps);
 
         // ================================================================
+        // TAB 8 - SAVE DATA ALL (BACKUP & RESTORE SEMUA DATA)
+        // ================================================================
+        function getAllInputHarianKeys() {
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('inputHarian_')) keys.push(k);
+            }
+            return keys;
+        }
+
+        async function renderRingkasanSaveAll() {
+            try {
+                const [salesCount, cashCount, printCount] = await Promise.all([
+                    db.sales.count(),
+                    db.cashIncome.count(),
+                    db.printHistory.count()
+                ]);
+                document.getElementById('sumSales').textContent = salesCount;
+                document.getElementById('sumCash').textContent = cashCount;
+                document.getElementById('sumPrint').textContent = printCount;
+                document.getElementById('sumHarian').textContent = getAllInputHarianKeys().length;
+            } catch (e) {
+                console.warn('Gagal memuat ringkasan Save All:', e);
+            }
+
+            const lastBackup = localStorage.getItem('gmLastBackupAt');
+            const statusEl = document.getElementById('saveAllStatus');
+            if (statusEl) {
+                statusEl.textContent = lastBackup
+                    ? '✅ Backup terakhir: ' + lastBackup
+                    : '📭 Belum pernah backup di perangkat ini.';
+            }
+        }
+
+        async function simpanSemuaData() {
+            const ok = confirm('Save All ke Device Ini?');
+            if (!ok) return;
+
+            try {
+                const [sales, cashIncome, printHistory] = await Promise.all([
+                    db.sales.toArray(),
+                    db.cashIncome.toArray(),
+                    db.printHistory.toArray()
+                ]);
+
+                const inputHarian = {};
+                getAllInputHarianKeys().forEach(function(key) {
+                    try {
+                        inputHarian[key] = JSON.parse(localStorage.getItem(key));
+                    } catch (e) {}
+                });
+
+                const backup = {
+                    app: 'GAJAH MAS 2026 - All in One',
+                    backupVersion: 1,
+                    exportedAt: new Date().toISOString(),
+                    data: { sales, cashIncome, printHistory, inputHarian }
+                };
+
+                const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'GAJAH_MAS_2026_BACKUP_' + stamp + '.json';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                const now = new Date().toLocaleString('id-ID');
+                localStorage.setItem('gmLastBackupAt', now);
+                renderRingkasanSaveAll();
+                showToast('✅ Semua data berhasil disimpan ke perangkat ini!', 'success');
+            } catch (e) {
+                showToast('❌ Gagal menyimpan data: ' + e.message, 'warning');
+            }
+        }
+
+        async function muatSemuaDataDariFile(file) {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const backup = JSON.parse(e.target.result);
+                    if (!backup || !backup.data) {
+                        showToast('File backup tidak valid.', 'warning');
+                        return;
+                    }
+                    const ok = confirm('Restore akan MENIMPA data yang ada saat ini dengan isi file backup. Lanjutkan?');
+                    if (!ok) return;
+
+                    const { sales, cashIncome, printHistory, inputHarian } = backup.data;
+
+                    if (Array.isArray(sales)) {
+                        await db.sales.clear();
+                        if (sales.length) await db.sales.bulkAdd(sales);
+                    }
+                    if (Array.isArray(cashIncome)) {
+                        await db.cashIncome.clear();
+                        if (cashIncome.length) await db.cashIncome.bulkAdd(cashIncome);
+                    }
+                    if (Array.isArray(printHistory)) {
+                        await db.printHistory.clear();
+                        if (printHistory.length) await db.printHistory.bulkAdd(printHistory);
+                    }
+                    if (inputHarian && typeof inputHarian === 'object') {
+                        getAllInputHarianKeys().forEach(function(k) { localStorage.removeItem(k); });
+                        Object.keys(inputHarian).forEach(function(k) {
+                            localStorage.setItem(k, JSON.stringify(inputHarian[k]));
+                        });
+                    }
+
+                    await loadSalesData();
+                    await loadCashData();
+                    renderPemasukan();
+                    renderSales();
+                    renderCek();
+                    await ptRefresh(false);
+                    renderCekV2();
+                    renderTagihanDariPiutang();
+                    renderRingkasanSaveAll();
+
+                    showToast('✅ Data berhasil dipulihkan dari backup!', 'success');
+                } catch (err) {
+                    showToast('❌ Gagal memulihkan data: ' + err.message, 'warning');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        document.getElementById('btnSaveAllData').addEventListener('click', simpanSemuaData);
+        document.getElementById('btnRestoreAllData').addEventListener('click', function() {
+            document.getElementById('restoreAllFileInput').click();
+        });
+        document.getElementById('restoreAllFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            muatSemuaDataDariFile(file);
+            e.target.value = '';
+        });
+
+        // ================================================================
         // TAB SWITCHING
         // ================================================================
         function switchTab(tabName) {
@@ -5404,6 +5606,9 @@
             }
             if (tabName === 'tab6') {
                 renderTagihanDariPiutang();
+            }
+            if (tabName === 'tab8') {
+                renderRingkasanSaveAll();
             }
         }
 
@@ -5446,6 +5651,7 @@
             await ptRefresh(false);
             renderCekV2();
             renderTagihanDariPiutang();
+            renderRingkasanSaveAll();
 
             // Inisialisasi Tab 7 (Pembayaran)
             initInputHarian();
