@@ -566,7 +566,7 @@
         .table-wrap table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 10px;
+            font-size: 0.65rem;
             min-width: 480px;
         }
         .table-wrap th {
@@ -576,7 +576,7 @@
             color: #1e293b;
             text-align: left;
             padding: 4px 8px;
-            font-size: 8px;
+            font-size: 0.6rem;
             text-transform: uppercase;
             letter-spacing: 0.2px;
             border-right: 1px solid rgba(0, 0, 0, 0.04);
@@ -589,7 +589,7 @@
             padding: 3px 8px;
             border-bottom: 1px solid #e5e9ef;
             white-space: nowrap;
-            font-size: 10px;
+            font-size: 0.65rem;
             background: #fafbfc;
         }
         .table-wrap tbody tr:nth-child(even) td {
@@ -2541,6 +2541,10 @@
                             <div style="font-size:18px;font-weight:700;color:#7c3aed;" id="sumHarian">0</div>
                             <div style="font-size:9px;color:#64748b;">Input Harian (tanggal)</div>
                         </div>
+                        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;text-align:center;">
+                            <div style="font-size:18px;font-weight:700;color:#0369a1;" id="sumCatatan">0</div>
+                            <div style="font-size:9px;color:#64748b;">Catatan Faktur</div>
+                        </div>
                     </div>
 
                     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
@@ -2791,6 +2795,12 @@
             cashIncome: '++id, bulan, tanggal',
             printHistory: '++id, timestamp, salesman, tanggalCetak, totalTagihan'
         }).upgrade(async tx => {});
+        db.version(3).stores({
+            sales: '++id, Tanggal, No.Faktur, Sales, Pembayaran, [Tanggal+Sales]',
+            cashIncome: '++id, bulan, tanggal',
+            printHistory: '++id, timestamp, salesman, tanggalCetak, totalTagihan',
+            catatanFaktur: 'noFaktur, updatedAt'
+        }).upgrade(async tx => {});
 
         async function migrateFromLocalStorage() {
             const count = await db.sales.count();
@@ -2838,6 +2848,7 @@
         let salesIsPiutangMode = false;
         let rawCashSales = [];
         let rawCashDrop = [];
+        let catatanFakturMap = {};
         let cekFilterFaktur = '',
             cekFilterSales = '',
             cekFilterBulan = '',
@@ -2856,6 +2867,65 @@
         let ptChecked = {};
         // State checkbox faktur cash (dipakai Tab 3 dan Tab 6)
         let cashChecked = {};
+
+        // ================================================================
+        // CATATAN / KETERANGAN FAKTUR (dipakai di semua modal detail)
+        // Supaya faktur yang sudah dicek tidak perlu dicek ulang.
+        // ================================================================
+        async function loadCatatanFaktur() {
+            try {
+                const all = await db.catatanFaktur.toArray();
+                catatanFakturMap = {};
+                all.forEach(function(c) { catatanFakturMap[c.noFaktur] = c; });
+            } catch (e) {
+                console.warn('Gagal memuat catatan faktur:', e);
+            }
+        }
+
+        async function simpanCatatanFaktur(noFaktur, catatan) {
+            const key = (noFaktur || '').toString().trim();
+            if (!key) { showToast('Nomor faktur tidak diketahui, catatan tidak bisa disimpan.', 'warning'); return false; }
+            const record = { noFaktur: key, catatan: catatan.trim(), updatedAt: new Date().toISOString() };
+            await db.catatanFaktur.put(record);
+            catatanFakturMap[key] = record;
+            return true;
+        }
+
+        function renderCatatanSectionHtml(noFaktur) {
+            const key = (noFaktur || '').toString().trim();
+            const existing = key ? catatanFakturMap[key] : null;
+            const infoText = existing
+                ? '📝 Terakhir diubah: ' + new Date(existing.updatedAt).toLocaleString('id-ID')
+                : 'Belum ada catatan untuk faktur ini.';
+            return `<div class="detail-card" style="margin-top:8px; background:#fffbeb; border:1px solid #fde68a;">
+                <div style="font-weight:700; font-size:11px; margin-bottom:4px; color:#92400e;">📝 Catatan / Keterangan</div>
+                <textarea id="catatanFakturInput" rows="3" style="width:100%; font-size:11px; padding:6px; border:1px solid #d1d5db; border-radius:4px; resize:vertical; font-family:inherit;" placeholder="Tulis catatan di sini, misal: sudah dicek cocok tanggal 13/07..." ${key ? '' : 'disabled'}>${existing ? existing.catatan : ''}</textarea>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap;">
+                    <span id="catatanFakturStatus" style="font-size:9px; color:#92400e;">${key ? infoText : 'Nomor faktur tidak diketahui.'}</span>
+                    <button class="btn btn-success btn-sm" id="btnSimpanCatatanFaktur" style="font-size:10px;" data-nofaktur="${key}" ${key ? '' : 'disabled'}>💾 Simpan Catatan</button>
+                </div>
+            </div>`;
+        }
+
+        function wireCatatanSectionEvents() {
+            const btn = document.getElementById('btnSimpanCatatanFaktur');
+            if (!btn) return;
+            btn.addEventListener('click', async function() {
+                const noFaktur = btn.dataset.nofaktur;
+                const input = document.getElementById('catatanFakturInput');
+                const statusEl = document.getElementById('catatanFakturStatus');
+                const val = input ? input.value : '';
+                const ok = await simpanCatatanFaktur(noFaktur, val);
+                if (!ok) return;
+                if (statusEl) statusEl.textContent = '✅ Tersimpan ' + new Date().toLocaleTimeString('id-ID');
+                showToast('📝 Catatan tersimpan untuk faktur ' + noFaktur, 'success');
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab) {
+                    if (activeTab.id === 'tab3') renderCek();
+                    else if (activeTab.id === 'tab5') renderCekV2();
+                }
+            });
+        }
 
         // ================================================================
         // FUNGSI CASH (Tab 2) – disingkat
@@ -3645,7 +3715,8 @@
                     const ketCellSales = inCashDrop ? '<span class="stempel-lunas">Lunas</span>' :
                         `<span class="badge ${badgeClass}">${status}</span>`;
                     const cbChecked = cashChecked[noFaktur] ? 'checked' : '';
-                    return `<tr><td><input type="checkbox" class="cash-row-checkbox" data-faktur="${noFaktur}" ${cbChecked}></td><td><span class="faktur-link" data-idx="${idx}" data-src="cekCash">${noFaktur}</span></td><td>${fmtTanggal(d.Tanggal)}</td><td class="num">${fmtRp(d.Total || 0)}</td><td>${d.Sales || ''}</td><td>${d.Customer || ''}</td><td>${ketCellSales}</td></tr>`;
+                    const catatanIcon = catatanFakturMap[noFaktur] ? ' <span title="Sudah ada catatan" style="cursor:default;">📝</span>' : '';
+                    return `<tr><td><input type="checkbox" class="cash-row-checkbox" data-faktur="${noFaktur}" ${cbChecked}></td><td><span class="faktur-link" data-idx="${idx}" data-src="cekCash">${noFaktur}</span>${catatanIcon}</td><td>${fmtTanggal(d.Tanggal)}</td><td class="num">${fmtRp(d.Total || 0)}</td><td>${d.Sales || ''}</td><td>${d.Customer || ''}</td><td>${ketCellSales}</td></tr>`;
                 }).join('');
             }
             document.getElementById('cekCashSalesCount').textContent = filteredCashSales.length;
@@ -3663,7 +3734,8 @@
                     const tglBayar = fmtTglBayarCash(d._tglHari, d._bulanRecord);
                     const ketCellDrop = inSales ? '<span class="stempel-lunas">Lunas</span>' :
                         `<span class="badge ${badgeClass}">${status}</span>`;
-                    return `<tr><td><span class="faktur-link" data-idx="${idx}" data-src="cekCashDrop">${no || '(kosong)'}</span></td><td>${d.tglFaktur || ''}</td><td class="num">${fmtRp(d.tagihan || 0)}</td><td>${tglBayar}</td><td>${namaToko}</td><td>${ketCellDrop}</td></tr>`;
+                    const catatanIconDrop = catatanFakturMap[no] ? ' <span title="Sudah ada catatan" style="cursor:default;">📝</span>' : '';
+                    return `<tr><td><span class="faktur-link" data-idx="${idx}" data-src="cekCashDrop">${no || '(kosong)'}</span>${catatanIconDrop}</td><td>${d.tglFaktur || ''}</td><td class="num">${fmtRp(d.tagihan || 0)}</td><td>${tglBayar}</td><td>${namaToko}</td><td>${ketCellDrop}</td></tr>`;
                 }).join('');
             }
             document.getElementById('cekCashDropCount').textContent = filteredCashDropFinal.length;
@@ -4155,7 +4227,8 @@
                     const inPiutang = piutangMap.has(noFaktur);
                     const status = inPiutang ? 'COCOK' : 'TIDAK COCOK';
                     const badgeClass = inPiutang ? 'cocok' : 'tidak';
-                    return `<tr><td><span class="faktur-link" data-idx="${realIdx}" data-src="cekV2Sales">${noFaktur}</span></td><td>${fmtTanggal(d.Tanggal)}</td><td class="num">${fmtRp(d.Total || 0)}</td><td>${d.Sales || ''}</td><td>${d.Customer || ''}</td><td><span class="badge ${badgeClass}">${status}</span></td></tr>`;
+                    const catatanIconV2Sales = catatanFakturMap[noFaktur] ? ' <span title="Sudah ada catatan" style="cursor:default;">📝</span>' : '';
+                    return `<tr><td><span class="faktur-link" data-idx="${realIdx}" data-src="cekV2Sales">${noFaktur}</span>${catatanIconV2Sales}</td><td>${fmtTanggal(d.Tanggal)}</td><td class="num">${fmtRp(d.Total || 0)}</td><td>${d.Sales || ''}</td><td>${d.Customer || ''}</td><td><span class="badge ${badgeClass}">${status}</span></td></tr>`;
                 }).join('');
             }
             const piutangBody = document.getElementById('cekV2PiutangBody');
@@ -4170,7 +4243,8 @@
                     const status = inSales ? 'COCOK' : 'TIDAK COCOK';
                     const badgeClass = inSales ? 'cocok' : 'tidak';
                     const namaToko = d.namaToko || d.alamat || '-';
-                    return `<tr><td><span class="faktur-link" data-idx="${realIdx}" data-src="cekV2Piutang">${no || '(kosong)'}</span></td><td>${d.tglFaktur || ''}</td><td class="num">${fmtRp(d.tagihan || 0)}</td><td>${namaToko}</td><td><span class="badge ${badgeClass}">${status}</span></td></tr>`;
+                    const catatanIconV2Piutang = catatanFakturMap[no] ? ' <span title="Sudah ada catatan" style="cursor:default;">📝</span>' : '';
+                    return `<tr><td><span class="faktur-link" data-idx="${realIdx}" data-src="cekV2Piutang">${no || '(kosong)'}</span>${catatanIconV2Piutang}</td><td>${d.tglFaktur || ''}</td><td class="num">${fmtRp(d.tagihan || 0)}</td><td>${namaToko}</td><td><span class="badge ${badgeClass}">${status}</span></td></tr>`;
                 }).join('');
             }
             document.getElementById('cekV2SalesCount').textContent = filteredTempoSales.length;
@@ -4218,6 +4292,28 @@
                 }
                 if (!salesObj && !piutangObj) { showToast('Data tidak ditemukan.', 'warning'); return; }
                 showDetailModalV2(salesObj, piutangObj, title);
+            } else if (target.dataset.src && (target.dataset.src === 'cekCash' || target.dataset.src ===
+                'cekCashDrop')) {
+                e.preventDefault();
+                const idx = parseInt(target.dataset.idx, 10);
+                const src = target.dataset.src;
+                let salesObj = null,
+                    dropObj = null,
+                    title = '';
+                if (src === 'cekCash') {
+                    salesObj = rawCashSales[idx] || null;
+                    const no = (salesObj ? salesObj['No.Faktur'] : '').toString().trim();
+                    dropObj = rawCashDrop.find(d => (d.noFaktur || '').toString().trim() === no) || null;
+                    title = '🧾 Detail Faktur Cash: ' + (no || '(tanpa nomor)');
+                } else if (src === 'cekCashDrop') {
+                    dropObj = rawCashDrop[idx] || null;
+                    const no = (dropObj ? dropObj.noFaktur : '').toString().trim();
+                    salesObj = salesData.find(d => (d['No.Faktur'] || '').toString().trim() === no && (d
+                        .Pembayaran || '').toLowerCase() === 'cash') || null;
+                    title = '🧾 Detail Cash Dropping: ' + (no || '(tanpa nomor)');
+                }
+                if (!salesObj && !dropObj) { showToast('Data tidak ditemukan.', 'warning'); return; }
+                showDetailModalCekCash(salesObj, dropObj, title);
             }
         });
 
@@ -4259,8 +4355,55 @@
                         <div class="row"><span class="label">Keterangan</span><span class="value">${piutangObj.ket || '-'}</span></div>`;
             } else { html += '<div class="not-found-msg">Belum ada catatan di Data Uang Masuk (Piutang Tempo)</div>'; }
             html += '</div>';
+            const noFakturKey = (salesObj && salesObj['No.Faktur']) || (piutangObj && piutangObj.noFaktur) || '';
+            html += renderCatatanSectionHtml(noFakturKey);
             body.innerHTML = html;
             modal.classList.add('show');
+            wireCatatanSectionEvents();
+        }
+
+        function showDetailModalCekCash(salesObj, dropObj, title) {
+            const modal = document.getElementById('cekV2DetailModal');
+            const titleEl = document.getElementById('cekV2DetailTitle');
+            const body = document.getElementById('cekV2DetailBody');
+            titleEl.textContent = title || '🧾 Detail Faktur';
+            const hasSales = salesObj && Object.keys(salesObj).length > 0;
+            const hasDrop = dropObj && Object.keys(dropObj).length > 0;
+            let statusText = '',
+                badgeClass = '';
+            if (hasSales && hasDrop) { statusText = '✅ COCOK — Data penjualan cash dan cash dropping cocok.';
+                badgeClass = 'cocok'; } else if (hasSales && !hasDrop) { statusText =
+                    '❌ TIDAK COCOK — Belum ada catatan di Data Uang Masuk (Cash Dropping).';
+                badgeClass = 'tidak'; } else { statusText = '❌ TIDAK COCOK — Tidak ditemukan di Bank Data Penjualan (Cash).';
+                badgeClass = 'tidak'; }
+            let html = `<div class="match-status"><span class="badge ${badgeClass}">${statusText}</span></div><div class="detail-card">`;
+            if (hasSales) {
+                html += `<div class="row"><span class="label">No.Faktur</span><span class="value">${salesObj['No.Faktur'] || '-'}</span></div>
+                        <div class="row"><span class="label">Tanggal</span><span class="value">${fmtTanggal(salesObj.Tanggal)}</span></div>
+                        <div class="row"><span class="label">Sales</span><span class="value">${salesObj.Sales || '-'}</span></div>
+                        <div class="row"><span class="label">Customer</span><span class="value">${salesObj.Customer || '-'}</span></div>
+                        <div class="row"><span class="label">Alamat</span><span class="value">${salesObj.Alamat || '-'}</span></div>
+                        <div class="row"><span class="label">Total (Penjualan)</span><span class="value">${fmtRp(salesObj.Total || 0)}</span></div>`;
+            } else { html += '<div class="not-found-msg">Tidak ditemukan di Bank Data Penjualan (Cash)</div>'; }
+            html += '</div><div class="detail-card" style="margin-top:8px;">';
+            if (hasDrop) {
+                const belumBayar = (dropObj.tagihan || 0) - (dropObj.totalBayar || 0);
+                html += `<div class="row"><span class="label">No.Faktur</span><span class="value">${dropObj.noFaktur || '-'}</span></div>
+                        <div class="row"><span class="label">Tgl Faktur</span><span class="value">${dropObj.tglFaktur || '-'}</span></div>
+                        <div class="row"><span class="label">Sales</span><span class="value">${dropObj.sales || '-'}</span></div>
+                        <div class="row"><span class="label">Nama Toko</span><span class="value">${dropObj.namaToko || dropObj.alamat || '-'}</span></div>
+                        <div class="row"><span class="label">Nominal</span><span class="value">${fmtRp(dropObj.tagihan || 0)}</span></div>
+                        <div class="row"><span class="label">Dibayar Cash</span><span class="value">${fmtRp(dropObj.bayarCash || 0)}</span></div>
+                        <div class="row"><span class="label">Dibayar Transfer</span><span class="value">${fmtRp(dropObj.bayarTransfer || 0)}</span></div>
+                        <div class="row"><span class="label">Selisih</span><span class="value" style="color:${Math.abs(belumBayar)>0.5?'#b91c1c':'#1e7a46'};">${fmtRp(belumBayar)}</span></div>
+                        <div class="row"><span class="label">Keterangan</span><span class="value">${dropObj.ket || '-'}</span></div>`;
+            } else { html += '<div class="not-found-msg">Belum ada catatan di Data Uang Masuk (Cash Dropping)</div>'; }
+            html += '</div>';
+            const noFakturKey = (salesObj && salesObj['No.Faktur']) || (dropObj && dropObj.noFaktur) || '';
+            html += renderCatatanSectionHtml(noFakturKey);
+            body.innerHTML = html;
+            modal.classList.add('show');
+            wireCatatanSectionEvents();
         }
         document.getElementById('cekV2DetailClose').addEventListener('click', () => { document.getElementById(
                 'cekV2DetailModal').classList.remove('show'); });
@@ -5453,15 +5596,17 @@
 
         async function renderRingkasanSaveAll() {
             try {
-                const [salesCount, cashCount, printCount] = await Promise.all([
+                const [salesCount, cashCount, printCount, catatanCount] = await Promise.all([
                     db.sales.count(),
                     db.cashIncome.count(),
-                    db.printHistory.count()
+                    db.printHistory.count(),
+                    db.catatanFaktur.count()
                 ]);
                 document.getElementById('sumSales').textContent = salesCount;
                 document.getElementById('sumCash').textContent = cashCount;
                 document.getElementById('sumPrint').textContent = printCount;
                 document.getElementById('sumHarian').textContent = getAllInputHarianKeys().length;
+                document.getElementById('sumCatatan').textContent = catatanCount;
             } catch (e) {
                 console.warn('Gagal memuat ringkasan Save All:', e);
             }
@@ -5480,10 +5625,11 @@
             if (!ok) return;
 
             try {
-                const [sales, cashIncome, printHistory] = await Promise.all([
+                const [sales, cashIncome, printHistory, catatanFaktur] = await Promise.all([
                     db.sales.toArray(),
                     db.cashIncome.toArray(),
-                    db.printHistory.toArray()
+                    db.printHistory.toArray(),
+                    db.catatanFaktur.toArray()
                 ]);
 
                 const inputHarian = {};
@@ -5495,9 +5641,9 @@
 
                 const backup = {
                     app: 'GAJAH MAS 2026 - All in One',
-                    backupVersion: 1,
+                    backupVersion: 2,
                     exportedAt: new Date().toISOString(),
-                    data: { sales, cashIncome, printHistory, inputHarian }
+                    data: { sales, cashIncome, printHistory, catatanFaktur, inputHarian }
                 };
 
                 const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -5533,7 +5679,7 @@
                     const ok = confirm('Restore akan MENIMPA data yang ada saat ini dengan isi file backup. Lanjutkan?');
                     if (!ok) return;
 
-                    const { sales, cashIncome, printHistory, inputHarian } = backup.data;
+                    const { sales, cashIncome, printHistory, catatanFaktur, inputHarian } = backup.data;
 
                     if (Array.isArray(sales)) {
                         await db.sales.clear();
@@ -5546,6 +5692,11 @@
                     if (Array.isArray(printHistory)) {
                         await db.printHistory.clear();
                         if (printHistory.length) await db.printHistory.bulkAdd(printHistory);
+                    }
+                    if (Array.isArray(catatanFaktur)) {
+                        await db.catatanFaktur.clear();
+                        if (catatanFaktur.length) await db.catatanFaktur.bulkAdd(catatanFaktur);
+                        await loadCatatanFaktur();
                     }
                     if (inputHarian && typeof inputHarian === 'object') {
                         getAllInputHarianKeys().forEach(function(k) { localStorage.removeItem(k); });
@@ -5627,6 +5778,7 @@
         // ================================================================
         (async function init() {
             await migrateFromLocalStorage();
+            await loadCatatanFaktur();
             await loadSalesData();
 
             const now = new Date();
